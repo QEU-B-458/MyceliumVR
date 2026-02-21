@@ -1,0 +1,73 @@
+[package]
+name = "bevy_game" # ToDo
+version = "0.1.0"
+publish = false
+authors = ["Niklas Eicker <git@nikl.me>"] # ToDo: you are the author ;)
+edition = "2024"
+exclude = ["dist", "build", "assets", "credits"]
+
+[workspace]
+members = ["mobile"]
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.dev]
+opt-level = 1
+
+# This is used by trunk as it doesn't support custom profiles: https://github.com/trunk-rs/trunk/issues/605
+# xbuild also uses this profile for building android AABs because I couldn't find a configuration for it
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+
+# Profile for distribution
+[profile.dist]
+inherits = "release"
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[features]
+dev = [
+    "bevy/dynamic_linking",
+]
+
+# All of Bevy's default features exept for the audio related ones (bevy_audio, vorbis), since they clash with bevy_kira_audio
+#   and android_shared_stdcxx/android-game-activity, since those are covered in `mobile`
+[dependencies]
+bevy = { version = "0.18.0", default-features = false, features = [
+    "default_app",
+    "2d_api",
+    "2d_bevy_render",
+    "3d_api",
+    "3d_bevy_render",
+    "ui_api",
+    "ui_bevy_render",
+    "scene",
+    "picking",
+    "bevy_gilrs",
+    "bevy_winit",
+    "default_font",
+    "multi_threaded",
+    "webgl2",
+    "x11",
+    "wayland",
+    "sysinfo_plugin",
+] }
+bevy_kira_audio = { version = "0.25", features = ["android_shared_stdcxx"] }
+bevy_asset_loader = { version = "0.25.0" }
+rand = { version = "0.9" }
+webbrowser = { version = "1", features = ["hardened"] }
+
+# keep the following in sync with Bevy's dependencies
+winit = { version = "0.30", default-features = false }
+image = { version = "0.25", default-features = false }
+## This greatly improves WGPU's performance due to its heavy use of trace! calls
+log = { version = "0.4", features = ["max_level_debug", "release_max_level_warn"] }
+
+[build-dependencies]
+embed-resource = "1"
