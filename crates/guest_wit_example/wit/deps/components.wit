@@ -1,0 +1,20 @@
+package game:components;
+
+interface components {
+  use wasvy:ecs/app.{component};
+
+  /// wasvy:type-path=bevy_game::components::Health
+  resource health {
+    constructor(component: component);
+    heal: func(amount: f32);
+    pct: func() -> f32;
+    statusreport: func() -> string;
+  }
+}
+
+world host {
+  import components;
+  export setup: func(app: borrow<wasvy:ecs/app/app>);
+  export heal-system: func(query: borrow<wasvy:ecs/app/query>);
+  export pct-system: func(query: borrow<wasvy:ecs/app/query>);
+}

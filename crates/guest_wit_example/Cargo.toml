@@ -1,0 +1,18 @@
+[package]
+name = "guest_wit_example"
+version = "0.1.0"
+edition = "2024"
+authors = ["Niklas Eicker <git@nikl.me>"]
+readme = "README.md"
+publish = false
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+wasvy_macros.workspace = true
+lol_alloc = "0.4.1"

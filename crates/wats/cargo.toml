@@ -1,0 +1,9 @@
+[package]
+name = "component_script"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+logos = "0.14"
+nom = "7.1"
+thiserror = "1.0" # Clean error handling

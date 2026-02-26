@@ -1,63 +1,81 @@
-// disable console on windows for release builds
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+use bevy::{prelude::*, render::pipelined_rendering::PipelinedRenderingPlugin, DefaultPlugins};
+use bevy_app::{App, PluginGroup, ScheduleRunnerPlugin, Startup};
+use bevy_asset::AssetPlugin;
+use bevy_mod_openxr::{add_xr_plugins, resources::OxrSessionConfig};
+use openxr::EnvironmentBlendMode;
+use std::time::Duration;
+use wasvy::prelude::*;
 
-use bevy::DefaultPlugins;
-use bevy::asset::AssetMetaCheck;
-use bevy::ecs::system::NonSendMarker;
-use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
-use bevy::winit::WINIT_WINDOWS;
-use bevy_game::GamePlugin; // ToDo: Replace bevy_game with your new crate name.
-use std::io::Cursor;
-use winit::window::Icon;
+mod components;
+use components::Health;
 
-fn main() {
-    App::new()
-        .insert_resource(ClearColor(Color::linear_rgb(0.4, 0.4, 0.4)))
-        .add_plugins(
-            DefaultPlugins
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        title: "Bevy game".to_string(), // ToDo
-                        // Bind to canvas included in `index.html`
-                        canvas: Some("#bevy".to_owned()),
-                        fit_canvas_to_parent: true,
-                        // Tells wasm not to override default event handling, like F5 and Ctrl+R
-                        prevent_default_event_handling: false,
-                        ..default()
-                    }),
-                    ..default()
-                })
-                .set(AssetPlugin {
-                    meta_check: AssetMetaCheck::Never,
-                    ..default()
-                }),
-        )
-        .add_plugins(GamePlugin)
-        .add_systems(Startup, set_window_icon)
-        .run();
+wasvy::auto_host_components! {
+    path = "wit",
+    world = "game:components/host",
+    module = components_bindings,
 }
 
-// Sets the icon on windows and X11
-fn set_window_icon(
-    primary_window: Single<Entity, With<PrimaryWindow>>,
-    _non_send_marker: NonSendMarker,
-) -> Result {
-    WINIT_WINDOWS.with_borrow(|windows| {
-        let Some(primary) = windows.get_window(*primary_window) else {
-            return Err(BevyError::from("No primary window!"));
-        };
-        let icon_buf = Cursor::new(include_bytes!(
-            "../build/macos/AppIcon.iconset/icon_256x256.png"
-        ));
-        if let Ok(image) = image::load(icon_buf, image::ImageFormat::Png) {
-            let image = image.into_rgba8();
-            let (width, height) = image.dimensions();
-            let rgba = image.into_raw();
-            let icon = Icon::from_rgba(rgba, width, height).unwrap();
-            primary.set_window_icon(Some(icon));
-        };
+fn main() {
+    let mut app = App::new();
+    let mut default_plugins = DefaultPlugins.build();
+    let asset_path = format!("{}/assets", env!("CARGO_MANIFEST_DIR"));
+    let processed_path = format!("{}/assets/processed", env!("CARGO_MANIFEST_DIR"));
+    
+    default_plugins = default_plugins.set(AssetPlugin {
+        file_path: asset_path,
+        processed_file_path: processed_path,
+        ..default()
+    });
+    
+    let xr_plugins = add_xr_plugins(default_plugins.disable::<PipelinedRenderingPlugin>());
+    
+    app.insert_resource(OxrSessionConfig {
+            blend_mode_preference: vec![
+                EnvironmentBlendMode::ALPHA_BLEND,
+                EnvironmentBlendMode::ADDITIVE,
+                EnvironmentBlendMode::OPAQUE,
+            ],
+            ..default()
+        })
+    .add_plugins(xr_plugins) // This now includes your configured AssetPlugin and TaskPool
+    .add_plugins(bevy_mod_xr::hand_debug_gizmos::HandGizmosPlugin)
+    .add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_millis(16)))
+    .add_plugins(ModloaderPlugin::default().add_functionality(add_components_to_linker))
+    .add_plugins(WitGeneratorPlugin::default())
+    .add_systems(Startup, (spawn_entities, load_mods))
+    .run();
+}
 
-        Ok(())
-    })
+fn spawn_entities(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>,) {
+    commands.spawn(Health {
+        current: 5.0,
+        max: 10.0,
+    });
+    commands.spawn((
+        Mesh3d(meshes.add(Circle::new(4.0))),
+        MeshMaterial3d(materials.add(Color::WHITE)),
+        Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+    ));
+    // cube
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+        MeshMaterial3d(materials.add(Color::srgb_u8(124, 144, 255))),
+        Transform::from_xyz(0.0, 0.5, 0.0),
+    ));
+    // light
+    commands.spawn((
+        PointLight {
+            shadows_enabled: true,
+            ..default()
+        },
+        Transform::from_xyz(4.0, 8.0, 4.0),
+    ));
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+}
+
+fn load_mods(mut mods: Mods) {
+    mods.load("mods/guest_wit_example.wasm");
 }

@@ -1,0 +1,17 @@
+package game:components;
+
+interface components {
+  use wasvy:ecs/app.{component};
+
+  /// wasvy:type-path=bevy_game::components::Health
+  resource health {
+    constructor(component: component);
+    heal: func(amount: f32);
+    pct: func() -> f32;
+    statusreport: func() -> string;
+  }
+}
+
+world host {
+  import components;
+}

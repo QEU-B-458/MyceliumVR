@@ -115,3 +115,10 @@ This project is licensed under [CC0 1.0 Universal](LICENSE) except some content 
 [mobile_dev_with_bevy_2]: https://www.nikl.me/blog/2023/notes_on_mobile_development_with_bevy_2/
 [workflow_bevy_android]: https://www.nikl.me/blog/2023/github_workflow_to_publish_android_app/
 [workflow_bevy_ios]: https://www.nikl.me/blog/2023/github_workflow_to_publish_ios_app/
+
+
+
+
+wasm-tools component wit ./wit -o metadata.wasm                                                           
+wasm-tools component embed metadata.wasm .\guest_wit_example.wat --world host -o .\guest_wit_example.wasm 
+wasm-tools component new .\guest_wit_example.wasm -o .\guest_wit_example2.wasm
