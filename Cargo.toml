@@ -42,10 +42,6 @@ bevy_color = { version = "0.18", default-features = false }
 bevy_transform = { version = "0.18", default-features = false }
 bevy_derive = { version = "0.18", default-features = false }
 bevy_platform = { version = "0.18", default-features = false }
-bevy_mod_xr = { path = "crates/bevy_xr", version = "0.5.0" }
-bevy_mod_openxr = { path = "crates/bevy_openxr", version = "0.5.0" }
-bevy_xr_utils = { path = "crates/bevy_xr_utils", version = "0.5.0" }
-
 [dependencies]
 # The main Bevy engine
 bevy = { version = "0.18.0", default-features = false, features = [
@@ -74,10 +70,10 @@ bevy_derive = { version = "0.18", default-features = false }
 bevy_platform = { version = "0.18", default-features = false }
 bevy_asset = { version = "0.18", default-features = false }
 
-openxr = "0.21.1"
 thiserror = "2.0.3"
 wgpu = "27"
 wgpu-hal = "27"
+openxr = "0.21.1"
 
 # External dependencies
 bevy_kira_audio = { version = "0.25", features = ["android_shared_stdcxx"] }
@@ -92,9 +88,16 @@ wasmtime-wasi = "40.0.1"
 serde_json = "1.0.149"
 wit-bindgen = "0.50.0"
 wasvy = "0.0.7"
-bevy_mod_xr = { path = "crates/bevy_xr", version = "0.5.0" }
-bevy_mod_openxr = { path = "crates/bevy_openxr", version = "0.5.0" }
-bevy_xr_utils = { path = "crates/bevy_xr_utils", version = "0.5.0" }
+ash = "0.38"
+openxr_mndx_xdev_space = "0.2.0"
+uuid = { version = "1", features = ["v4", "serde"] }
+rmp-serde = "1"
+serde = { version = "1", features = ["derive"] }
+
+# On Windows, add the `static` feature to openxr so Entry::linked() is available
+# and the OpenXR loader is embedded in the binary rather than loaded from a DLL.
+[target.'cfg(target_family = "windows")'.dependencies]
+openxr = { version = "0.21.1", features = ["static"] }
 
 [build-dependencies]
 embed-resource = "1"

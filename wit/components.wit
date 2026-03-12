@@ -3,7 +3,7 @@ package game:components;
 interface components {
   use wasvy:ecs/app.{component};
 
-  /// wasvy:type-path=bevy_game::components::Health
+  /// wasvy:type-path=MyceliumVR::components::Health
   resource health {
     constructor(component: component);
     heal: func(amount: f32);
