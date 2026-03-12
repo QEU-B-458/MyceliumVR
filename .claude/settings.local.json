@@ -8,7 +8,9 @@
       "Bash(xargs grep:*)",
       "Bash(grep -n \"AppTypeRegistry\" /c/Users/zquee/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.18.0/src/*.rs)",
       "Bash(ls -d /c/Users/zquee/.cargo/registry/src/*/bevy_render-*)",
-      "Bash(ls -d /c/Users/zquee/.cargo/registry/src/*/bevy_render_*)"
+      "Bash(ls -d /c/Users/zquee/.cargo/registry/src/*/bevy_render_*)",
+      "Bash(curl -sL \"https://www.gnu.org/licenses/gpl-3.0.txt\" -o /tmp/gpl3.txt)",
+      "Read(//tmp/**)"
     ]
   }
 }

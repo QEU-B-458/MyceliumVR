@@ -2,7 +2,7 @@
 name = "MyceliumVR"
 version = "0.1.0"
 edition = "2024"
-authors = ["Niklas Eicker <git@nikl.me>"]
+authors = ["UNTAMEDSTARBLOB"]
 publish = false
 exclude = ["dist", "build", "assets", "credits"]
 build = "build.rs"

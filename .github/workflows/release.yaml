@@ -1,4 +1,4 @@
-name: release-flow
+name: Release
 
 on:
   push:
@@ -7,15 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version - in the form of v1.2.3'
+        description: "Version - in the form of v1.2.3"
         required: true
         type: string
 
-# ToDo: adapt names
 env:
-  # This variable is used to name release output files.
-  GAME_EXECUTABLE_NAME: bevy_game
-  GAME_OSX_APP_NAME: BevyGame
+  BINARY_NAME: MyceliumVR
 
 permissions:
   contents: write
@@ -30,243 +27,180 @@ jobs:
     outputs:
       version: ${{ inputs.version || steps.tag.outputs.tag }}
 
-  build-macOS:
-    runs-on: macos-latest
-    needs: get-version
-    env:
-      # macOS 11.0 Big Sur is the first version to support universal binaries
-      MACOSX_DEPLOYMENT_TARGET: 11.0
-      VERSION: ${{needs.get-version.outputs.version}}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Remove build script
-        run: |
-          rm build.rs
-      - name: Install rust toolchain for Apple Silicon
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-          targets: aarch64-apple-darwin
-      - name: Build release for Apple Silicon
-        run: |
-          SDKROOT=$(xcrun -sdk macosx --show-sdk-path) cargo build --profile dist --target=aarch64-apple-darwin
-      - name: Install rust toolchain for Apple x86
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-          targets: x86_64-apple-darwin
-      - name: Build release for x86 Apple
-        run: |
-          SDKROOT=$(xcrun -sdk macosx --show-sdk-path) cargo build --profile dist --target=x86_64-apple-darwin
-      - name: Create Universal Binary
-        run: |
-          lipo -create -output target/dist/${{ env.GAME_EXECUTABLE_NAME }} target/aarch64-apple-darwin/dist/${{ env.GAME_EXECUTABLE_NAME }} target/x86_64-apple-darwin/dist/${{ env.GAME_EXECUTABLE_NAME }}
-      - name: Create release
-        run: |
-          mkdir -p build/macos/src/Game.app/Contents/MacOS/assets
-          cp -r assets/ build/macos/src/Game.app/Contents/MacOS/assets
-          cp -r credits/ build/macos/src/Game.app/Contents/MacOS/credits
-          cp target/dist/${{ env.GAME_EXECUTABLE_NAME }} build/macos/src/Game.app/Contents/MacOS/
-          mv build/macos/src/Game.app build/macos/src/${{ env.GAME_OSX_APP_NAME }}.app
-          ln -s /Applications build/macos/src/
-          hdiutil create -fs HFS+ -volname "${{ env.GAME_OSX_APP_NAME }}" -srcfolder build/macos/src ${{ env.GAME_EXECUTABLE_NAME }}.dmg
-      - name: Upload release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ${{ env.GAME_EXECUTABLE_NAME }}.dmg
-          asset_name: ${{ env.GAME_EXECUTABLE_NAME }}_${{ env.VERSION }}_macOS.dmg
-          release_name: ${{ env.VERSION }}
-          tag: ${{ env.VERSION }}
-          overwrite: true
-
-  build-linux:
-    runs-on: ubuntu-latest
-    needs: get-version
-    env:
-      VERSION: ${{needs.get-version.outputs.version}}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-      - name: Install Dependencies
-        run: sudo apt-get update; sudo apt-get install g++ pkg-config libx11-dev libasound2-dev libudev-dev libxkbcommon-x11-0 libwayland-dev
-      - name: Build release
-        run: |
-          cargo build --profile dist
-      - name: Prepare release
-        run: |
-          chmod +x target/dist/${{ env.GAME_EXECUTABLE_NAME }}
-          mv target/dist/${{ env.GAME_EXECUTABLE_NAME }} .
-      - name: Bundle release
-        run: |
-          tar -czf ${{ env.GAME_EXECUTABLE_NAME }}_linux.tar.gz ${{ env.GAME_EXECUTABLE_NAME }} assets credits
-      - name: Upload release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ${{ env.GAME_EXECUTABLE_NAME }}_linux.tar.gz
-          asset_name: ${{ env.GAME_EXECUTABLE_NAME }}_${{ env.VERSION }}_linux.tar.gz
-          release_name: ${{ env.VERSION }}
-          tag: ${{ env.VERSION }}
-          overwrite: true
-
   build-windows:
     runs-on: windows-latest
     needs: get-version
     env:
-      VERSION: ${{needs.get-version.outputs.version}}
-      BUILD_INSTALLER: ${{ false }}
+      VERSION: ${{ needs.get-version.outputs.version }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@master
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: windows-release-${{ hashFiles('**/Cargo.toml') }}
+      - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - name: Install dotnet
-        if: ${{ env.BUILD_INSTALLER }}
-        uses: actions/setup-dotnet@v3
-        with:
-          global-json-file: build/windows/installer/global.json
+          targets: x86_64-pc-windows-msvc
       - name: Build release
-        run: |
-          cargo build --profile dist
+        run: cargo build --profile dist --target x86_64-pc-windows-msvc
       - name: Prepare release
-        run: |
-          mkdir target/dist/assets && cp -r assets target/dist/assets
-          mkdir target/dist/credits && cp -r credits target/dist/credits
-      - name: Zip release
-        uses: vimtor/action-zip@v1.1
-        with:
-          files: target/dist/assets/ target/dist/credits/ target/dist/${{ env.GAME_EXECUTABLE_NAME }}.exe
-          dest: ${{ env.GAME_EXECUTABLE_NAME }}_windows.zip
-      - name: Create Installer
-        if: ${{ env.BUILD_INSTALLER }}
         shell: bash
         run: |
-          tag=${{ env.VERSION }}
-          version="${tag#v}"
-          dotnet build -p:Version=$version -c Release build/windows/installer/Installer.wixproj --output installer
-      - name: Upload release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ${{ env.GAME_EXECUTABLE_NAME }}_windows.zip
-          asset_name: ${{ env.GAME_EXECUTABLE_NAME }}_${{ env.VERSION }}_windows.zip
-          tag: ${{ env.VERSION }}
-          overwrite: true
-      - name: Upload installer
-        if: ${{ env.BUILD_INSTALLER }}
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: installer/en-US/installer.msi
-          asset_name: ${{ env.GAME_EXECUTABLE_NAME }}_${{ env.VERSION }}_windows.msi
-          release_name: ${{ env.VERSION }}
-          tag: ${{ env.VERSION }}
-          overwrite: true
-
-  build-web:
-    runs-on: ubuntu-latest
-    needs: get-version
-    env:
-      VERSION: ${{needs.get-version.outputs.version}}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-      - name: Install Dependencies
-        run: sudo apt-get update; sudo apt-get install g++ pkg-config libx11-dev libasound2-dev libudev-dev libxkbcommon-x11-0 libwayland-dev
-      - name: Install trunk
-        uses: jetli/trunk-action@v0.4.0
-        with:
-          version: latest
-      - name: Add wasm target
-        run: |
-          rustup target add wasm32-unknown-unknown
-      - name: Build Release
-        run: |
-          trunk build --release
-      - name: Optimize Wasm
-        uses: NiklasEi/wasm-opt-action@v2
-        with:
-          file: dist/*.wasm
+          mkdir -p staging
+          cp "target/x86_64-pc-windows-msvc/dist/${{ env.BINARY_NAME }}.exe" staging/
+          cp -r assets staging/ 2>/dev/null || true
+          cp LICENSE staging/
+          cp README.md staging/
       - name: Zip release
         uses: vimtor/action-zip@v1.1
         with:
-          files: dist/
-          dest: ${{ env.GAME_EXECUTABLE_NAME }}_web.zip
+          files: staging/
+          dest: ${{ env.BINARY_NAME }}_windows_x86_64.zip
       - name: Upload release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ${{ env.GAME_EXECUTABLE_NAME }}_web.zip
-          asset_name: ${{ env.GAME_EXECUTABLE_NAME }}_${{ env.VERSION }}_web.zip
+          file: ${{ env.BINARY_NAME }}_windows_x86_64.zip
+          asset_name: ${{ env.BINARY_NAME }}_${{ env.VERSION }}_windows_x86_64.zip
           release_name: ${{ env.VERSION }}
           tag: ${{ env.VERSION }}
           overwrite: true
 
-  build-for-iOS:
-    runs-on: macos-latest
-    timeout-minutes: 30
-    needs: get-version
-    env:
-      VERSION: ${{needs.get-version.outputs.version}}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Add iOS targets
-        run: rustup target add aarch64-apple-ios x86_64-apple-ios
-      - name: Build app for iOS
-        run: |
-          cd mobile
-          make xcodebuild-iphone-release
-          mkdir Payload
-          mv build/Build/Products/Release-iphoneos/*.app Payload
-          zip -r ${{ env.GAME_EXECUTABLE_NAME }}.zip Payload
-          mv ${{ env.GAME_EXECUTABLE_NAME }}.zip ${{ env.GAME_EXECUTABLE_NAME }}.ipa
-      - name: Upload release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: mobile/${{ env.GAME_EXECUTABLE_NAME }}.ipa
-          asset_name: ${{ env.GAME_EXECUTABLE_NAME }}_${{ env.VERSION }}_unsigned_ios.ipa
-          release_name: ${{ env.VERSION }}
-          tag: ${{ env.VERSION }}
-          overwrite: true
-
-  build-for-Android:
+  build-linux-x86_64:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     needs: get-version
     env:
-      VERSION: ${{needs.get-version.outputs.version}}
+      VERSION: ${{ needs.get-version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Add Android targets
-        # could add more targets like armv7-linux-androideabi here (then also add to cargo-apk config)
-        run: rustup target add aarch64-linux-android
-      - name: Install Cargo APK
-        run: cargo install --force cargo-apk
-      - name: Build app for Android
-        # This uses a debug build, since release builds require keystore configuration
-        # For AAB builds that can be pushed to the Play store, see the release-android-google-play workflow.
-        run: ANDROID_NDK_ROOT=$ANDROID_NDK_LATEST_HOME cargo apk build --package mobile
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: linux-x86_64-release-${{ hashFiles('**/Cargo.toml') }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: x86_64-unknown-linux-gnu
+      - name: Install linux dependencies
+        run: sudo apt-get update; sudo apt-get install -y g++ pkg-config libx11-dev libasound2-dev libudev-dev libxkbcommon-x11-0 libwayland-dev libxkbcommon-dev
+      - name: Build release
+        run: cargo build --profile dist --target x86_64-unknown-linux-gnu
+      - name: Prepare and bundle release
+        run: |
+          chmod +x "target/x86_64-unknown-linux-gnu/dist/${{ env.BINARY_NAME }}"
+          cp "target/x86_64-unknown-linux-gnu/dist/${{ env.BINARY_NAME }}" .
+          tar -czf "${{ env.BINARY_NAME }}_linux_x86_64.tar.gz" "${{ env.BINARY_NAME }}" assets/ LICENSE README.md 2>/dev/null || \
+          tar -czf "${{ env.BINARY_NAME }}_linux_x86_64.tar.gz" "${{ env.BINARY_NAME }}" LICENSE README.md
       - name: Upload release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/debug/apk/${{ env.GAME_OSX_APP_NAME }}.apk
-          asset_name: ${{ env.GAME_EXECUTABLE_NAME }}_${{ env.VERSION }}_android.apk
+          file: ${{ env.BINARY_NAME }}_linux_x86_64.tar.gz
+          asset_name: ${{ env.BINARY_NAME }}_${{ env.VERSION }}_linux_x86_64.tar.gz
           release_name: ${{ env.VERSION }}
           tag: ${{ env.VERSION }}
           overwrite: true
+
+  build-linux-aarch64:
+    runs-on: ubuntu-latest
+    needs: get-version
+    env:
+      VERSION: ${{ needs.get-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: linux-aarch64-release-${{ hashFiles('**/Cargo.toml') }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: aarch64-unknown-linux-gnu
+      - name: Install cross-compilation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-aarch64-linux-gnu pkg-config libx11-dev libasound2-dev libudev-dev libxkbcommon-x11-0 libwayland-dev libxkbcommon-dev
+      - name: Build release
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          PKG_CONFIG_SYSROOT_DIR: /usr/aarch64-linux-gnu
+        run: cargo build --profile dist --target aarch64-unknown-linux-gnu
+      - name: Prepare and bundle release
+        run: |
+          cp "target/aarch64-unknown-linux-gnu/dist/${{ env.BINARY_NAME }}" .
+          tar -czf "${{ env.BINARY_NAME }}_linux_aarch64.tar.gz" "${{ env.BINARY_NAME }}" assets/ LICENSE README.md 2>/dev/null || \
+          tar -czf "${{ env.BINARY_NAME }}_linux_aarch64.tar.gz" "${{ env.BINARY_NAME }}" LICENSE README.md
+      - name: Upload release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ${{ env.BINARY_NAME }}_linux_aarch64.tar.gz
+          asset_name: ${{ env.BINARY_NAME }}_${{ env.VERSION }}_linux_aarch64.tar.gz
+          release_name: ${{ env.VERSION }}
+          tag: ${{ env.VERSION }}
+          overwrite: true
+
+  # ──────────────────────────────────────────────────────────────
+  # macOS — uncomment when ready to support macOS builds.
+  # Requires testing that OpenXR deps compile on macOS runners.
+  # ──────────────────────────────────────────────────────────────
+  # build-macos:
+  #   runs-on: macos-latest
+  #   needs: get-version
+  #   env:
+  #     MACOSX_DEPLOYMENT_TARGET: "11.0"
+  #     VERSION: ${{ needs.get-version.outputs.version }}
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/cache@v4
+  #       with:
+  #         path: |
+  #           ~/.cargo/bin/
+  #           ~/.cargo/registry/index/
+  #           ~/.cargo/registry/cache/
+  #           ~/.cargo/git/db/
+  #           target/
+  #         key: macos-release-${{ hashFiles('**/Cargo.toml') }}
+  #     - uses: dtolnay/rust-toolchain@master
+  #       with:
+  #         toolchain: stable
+  #         targets: aarch64-apple-darwin, x86_64-apple-darwin
+  #     - name: Build release (Apple Silicon)
+  #       run: SDKROOT=$(xcrun -sdk macosx --show-sdk-path) cargo build --profile dist --target aarch64-apple-darwin
+  #     - name: Build release (Intel)
+  #       run: SDKROOT=$(xcrun -sdk macosx --show-sdk-path) cargo build --profile dist --target x86_64-apple-darwin
+  #     - name: Create universal binary
+  #       run: |
+  #         lipo -create \
+  #           "target/aarch64-apple-darwin/dist/${{ env.BINARY_NAME }}" \
+  #           "target/x86_64-apple-darwin/dist/${{ env.BINARY_NAME }}" \
+  #           -output "${{ env.BINARY_NAME }}"
+  #     - name: Bundle release
+  #       run: |
+  #         tar -czf "${{ env.BINARY_NAME }}_macos_universal.tar.gz" "${{ env.BINARY_NAME }}" assets/ LICENSE README.md 2>/dev/null || \
+  #         tar -czf "${{ env.BINARY_NAME }}_macos_universal.tar.gz" "${{ env.BINARY_NAME }}" LICENSE README.md
+  #     - name: Upload release
+  #       uses: svenstaro/upload-release-action@v2
+  #       with:
+  #         repo_token: ${{ secrets.GITHUB_TOKEN }}
+  #         file: ${{ env.BINARY_NAME }}_macos_universal.tar.gz
+  #         asset_name: ${{ env.BINARY_NAME }}_${{ env.VERSION }}_macos_universal.tar.gz
+  #         release_name: ${{ env.VERSION }}
+  #         tag: ${{ env.VERSION }}
+  #         overwrite: true
